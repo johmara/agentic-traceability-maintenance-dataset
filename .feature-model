@@ -6,3 +6,10 @@ ReferenceManager
         GetPaper
         UpdatePaper
         DeletePaper
+    Collections
+        CreateCollection
+        GetCollection
+        UpdateCollection
+        DeleteCollection
+        AddPaperToCollection
+        RemovePaperFromCollection

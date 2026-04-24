@@ -8,4 +8,5 @@ public class Paper
     public int Year { get; set; }
     public string? Abstract { get; set; }
     public string? Doi { get; set; }
+    public List<Collection> Collections { get; set; } = []; // &line[Collections]
 }
