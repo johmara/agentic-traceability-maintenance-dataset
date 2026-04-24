@@ -1,0 +1,50 @@
+## Build output
+bin/
+obj/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## Rider / IntelliJ
+.idea/
+*.sln.iml
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+!**/packages/build/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Test results
+TestResults/
+[Cc]overage*/
+*.coverage
+*.coveragexml
+
+## Publish
+publish/
+**/Properties/PublishProfiles/
+
+## SQLite local databases
+*.db
+*.db-shm
+*.db-wal
+
+## OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Environment / secrets
+.env
+.env.local
+appsettings.Local.json
+appsettings.*.local.json
+**/secrets.json
