@@ -15,14 +15,15 @@ public static class PaperEndpoints
         app.MapGet("/papers", async (AppDbContext db, int limit = 25, int offset = 0) =>
         {
             var total = await db.Papers.CountAsync();
-            var items = await db.Papers.Skip(offset).Take(limit).ToListAsync();
+            var items = await db.Papers.Include(p => p.Authors)
+                .Skip(offset).Take(limit).ToListAsync();
             return Results.Ok(new PagedResult<Paper>(items, total, limit, offset));
         })
         .WithName("ListPapers")
         .WithOpenApi();
 
         app.MapGet("/papers/{id:int}", async (int id, AppDbContext db) =>
-            await db.Papers.FindAsync(id) is Paper paper
+            await db.Papers.Include(p => p.Authors).FirstOrDefaultAsync(p => p.Id == id) is Paper paper
                 ? Results.Ok(paper)
                 : Results.NotFound())
             .WithName("GetPaper")
@@ -32,10 +33,15 @@ public static class PaperEndpoints
         // &begin[CreatePaper]
         app.MapPost("/papers", async (PaperRequest req, AppDbContext db) =>
         {
+            var cache = new Dictionary<string, Author>();
+            var authors = new List<Author>();
+            foreach (var a in req.Authors)
+                authors.Add(await AuthorEndpoints.GetOrCreateAsync(a.Name, a.Email, a.Affiliations, db, cache));
+
             var paper = new Paper
             {
                 Title = req.Title,
-                Authors = req.Authors.Select(ToAuthor).ToList(),
+                Authors = authors,
                 Year = req.Year,
                 Abstract = req.Abstract,
                 Doi = req.Doi,
@@ -53,11 +59,16 @@ public static class PaperEndpoints
         // &begin[UpdatePaper]
         app.MapPut("/papers/{id:int}", async (int id, PaperRequest req, AppDbContext db) =>
         {
-            var paper = await db.Papers.FindAsync(id);
+            var paper = await db.Papers.Include(p => p.Authors).FirstOrDefaultAsync(p => p.Id == id);
             if (paper is null) return Results.NotFound();
 
+            var cache = new Dictionary<string, Author>();
+            var authors = new List<Author>();
+            foreach (var a in req.Authors)
+                authors.Add(await AuthorEndpoints.GetOrCreateAsync(a.Name, a.Email, a.Affiliations, db, cache));
+
             paper.Title = req.Title;
-            paper.Authors = req.Authors.Select(ToAuthor).ToList();
+            paper.Authors = authors;
             paper.Year = req.Year;
             paper.Abstract = req.Abstract;
             paper.Doi = req.Doi;
@@ -94,6 +105,7 @@ public static class PaperEndpoints
             int created = 0, skipped = 0;
             var seenDois = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var seenTitleAuthor = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var authorCache = new Dictionary<string, Author>(StringComparer.OrdinalIgnoreCase);
             foreach (var entry in entries)
             {
                 if (!entry.Fields.TryGetValue("title", out var title) || string.IsNullOrWhiteSpace(title))
@@ -115,7 +127,6 @@ public static class PaperEndpoints
                 var authorNames = (authorStr ?? string.Empty)
                     .Split(" and ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .ToList();
-                var authors = authorNames.Select(name => new Author { Name = name }).ToList();
 
                 if (normalizedDoi is null)
                 {
@@ -126,7 +137,7 @@ public static class PaperEndpoints
                         continue;
                     }
                     var normalizedTitle = title.Trim().ToLowerInvariant();
-                    var candidates = await db.Papers
+                    var candidates = await db.Papers.Include(p => p.Authors)
                         .Where(p => p.Doi == null && p.Title.ToLower() == normalizedTitle)
                         .ToListAsync();
                     if (candidates.Any(p => TitleAuthorKey(p.Title, p.Authors.Select(a => a.Name)) == titleAuthorKey))
@@ -141,6 +152,10 @@ public static class PaperEndpoints
                 entry.Fields.TryGetValue("abstract", out var abstractStr);
                 entry.Fields.TryGetValue("journal", out var journal);
                 entry.Fields.TryGetValue("booktitle", out var booktitle);
+
+                var authors = new List<Author>();
+                foreach (var name in authorNames)
+                    authors.Add(await AuthorEndpoints.GetOrCreateAsync(name, null, [], db, authorCache));
 
                 db.Papers.Add(new Paper
                 {
@@ -188,13 +203,4 @@ public static class PaperEndpoints
     private static string TitleAuthorKey(string title, IEnumerable<string> authorNames) =>
         title.Trim().ToLowerInvariant() + "||" +
         string.Join("|", authorNames.Select(n => n.Trim().ToLowerInvariant()).Order());
-
-    private static Author ToAuthor(AuthorRequest r) => new()
-    {
-        Name = r.Name,
-        Email = r.Email,
-        Affiliations = r.Affiliations
-            .Select(a => new Affiliation { Name = a.Name, Country = a.Country, City = a.City })
-            .ToList()
-    };
 }

@@ -38,6 +38,7 @@ using (var scope = app.Services.CreateScope())
 
 var v1 = app.MapGroup("/api/v1"); // &line[Versioning]
 v1.MapPaperEndpoints();
+v1.MapAuthorEndpoints(); // &line[Authors]
 v1.MapGroupEndpoints(); // &line[Groups]
 v1.MapFavoriteEndpoints(); // &line[Favorites]
 

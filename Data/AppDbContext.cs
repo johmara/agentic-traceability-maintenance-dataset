@@ -7,14 +7,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<Paper> Papers => Set<Paper>();
     public DbSet<Group> Groups => Set<Group>(); // &line[Groups]
+    public DbSet<Author> Authors => Set<Author>(); // &line[Authors]
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        modelBuilder.Entity<Paper>().OwnsMany(p => p.Authors, a =>
-        {
-            a.ToJson();
-            a.OwnsMany(x => x.Affiliations);
-        });
+        // &begin[Authors]
+        modelBuilder.Entity<Author>()
+            .OwnsMany(a => a.Affiliations, b => b.ToJson());
+
+        modelBuilder.Entity<Paper>()
+            .HasMany(p => p.Authors)
+            .WithMany(a => a.Papers)
+            .UsingEntity("PaperAuthor");
+        // &end[Authors]
 
         // &begin[Groups]
         modelBuilder.Entity<Group>()

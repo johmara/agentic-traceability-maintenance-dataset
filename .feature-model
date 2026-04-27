@@ -9,6 +9,13 @@ ReferenceManager
         DeletePaper
         ImportBibtex
         ExportBibtex
+    Authors
+        CreateAuthor
+        GetAuthor
+        ListAuthors
+        UpdateAuthor
+        DeleteAuthor
+        MergeAuthors
     Groups
         CreateGroup
         GetGroup
