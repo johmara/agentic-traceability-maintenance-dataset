@@ -20,3 +20,6 @@ ReferenceManager
         DeleteTag
         AddTagToPaper
         RemoveTagFromPaper
+    Favorites
+        ToggleFavorite
+        ListFavorites

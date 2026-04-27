@@ -10,4 +10,5 @@ public class Paper
     public string? Doi { get; set; }
     public List<Collection> Collections { get; set; } = []; // &line[Collections]
     public List<Tag> Tags { get; set; } = []; // &line[Tags]
+    public bool IsFavorited { get; set; } // &line[Favorites]
 }

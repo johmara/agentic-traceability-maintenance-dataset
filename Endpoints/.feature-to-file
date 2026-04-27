@@ -4,3 +4,5 @@ CollectionEndpoints.cs
 Collections
 TagEndpoints.cs
 Tags
+FavoriteEndpoints.cs
+Favorites
