@@ -3,6 +3,7 @@ using ReferenceManager.Data;
 using ReferenceManager.Models;
 using ReferenceManager.Requests;
 using ReferenceManager.Responses;
+using ReferenceManager.Services;
 
 namespace ReferenceManager.Endpoints;
 
@@ -78,7 +79,90 @@ public static class PaperEndpoints
         .WithName("DeletePaper")
         .WithOpenApi();
         // &end[DeletePaper]
+
+        // &begin[ImportBibtex]
+        app.MapPost("/papers/import/bibtex", async (IFormFile file, AppDbContext db) =>
+        {
+            using var reader = new StreamReader(file.OpenReadStream());
+            var content = await reader.ReadToEndAsync();
+            var entries = BibtexParser.Parse(content);
+
+            int created = 0, skipped = 0;
+            var seenDois = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenTitleAuthor = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var entry in entries)
+            {
+                if (!entry.Fields.TryGetValue("title", out var title) || string.IsNullOrWhiteSpace(title))
+                    continue;
+
+                entry.Fields.TryGetValue("doi", out var doi);
+                var normalizedDoi = string.IsNullOrWhiteSpace(doi) ? null : doi.Trim();
+
+                if (normalizedDoi is not null &&
+                    (seenDois.Contains(normalizedDoi) || await db.Papers.AnyAsync(p => p.Doi == normalizedDoi)))
+                {
+                    skipped++;
+                    continue;
+                }
+
+                if (normalizedDoi is not null) seenDois.Add(normalizedDoi);
+
+                entry.Fields.TryGetValue("author", out var authorStr);
+                var authorNames = (authorStr ?? string.Empty)
+                    .Split(" and ", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .ToList();
+                var authors = authorNames.Select(name => new Author { Name = name }).ToList();
+
+                if (normalizedDoi is null)
+                {
+                    var titleAuthorKey = TitleAuthorKey(title, authorNames);
+                    if (seenTitleAuthor.Contains(titleAuthorKey))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    var normalizedTitle = title.Trim().ToLowerInvariant();
+                    var candidates = await db.Papers
+                        .Where(p => p.Doi == null && p.Title.ToLower() == normalizedTitle)
+                        .ToListAsync();
+                    if (candidates.Any(p => TitleAuthorKey(p.Title, p.Authors.Select(a => a.Name)) == titleAuthorKey))
+                    {
+                        skipped++;
+                        continue;
+                    }
+                    seenTitleAuthor.Add(titleAuthorKey);
+                }
+
+                int.TryParse(entry.Fields.GetValueOrDefault("year"), out var year);
+                entry.Fields.TryGetValue("abstract", out var abstractStr);
+                entry.Fields.TryGetValue("journal", out var journal);
+                entry.Fields.TryGetValue("booktitle", out var booktitle);
+
+                db.Papers.Add(new Paper
+                {
+                    Title = title,
+                    Authors = authors,
+                    Year = year,
+                    Abstract = string.IsNullOrWhiteSpace(abstractStr) ? null : abstractStr,
+                    Doi = normalizedDoi,
+                    Journal = string.IsNullOrWhiteSpace(journal) ? null : journal,
+                    Booktitle = string.IsNullOrWhiteSpace(booktitle) ? null : booktitle,
+                });
+                created++;
+            }
+
+            await db.SaveChangesAsync();
+            return Results.Ok(new ImportResult(created, skipped));
+        })
+        .DisableAntiforgery()
+        .WithName("ImportBibtex")
+        .WithOpenApi();
+        // &end[ImportBibtex]
     }
+
+    private static string TitleAuthorKey(string title, IEnumerable<string> authorNames) =>
+        title.Trim().ToLowerInvariant() + "||" +
+        string.Join("|", authorNames.Select(n => n.Trim().ToLowerInvariant()).Order());
 
     private static Author ToAuthor(AuthorRequest r) => new()
     {
