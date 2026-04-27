@@ -9,6 +9,7 @@ ReferenceManager
         DeletePaper
         ImportBibtex
         ExportBibtex
+        SearchPapers
     Authors
         CreateAuthor
         GetAuthor

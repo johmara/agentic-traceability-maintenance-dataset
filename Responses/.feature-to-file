@@ -1,2 +1,5 @@
 ImportResult.cs
 ImportBibtex
+
+SearchResponse.cs
+SearchPapers

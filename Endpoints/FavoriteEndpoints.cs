@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using ReferenceManager.Data;
-using ReferenceManager.Models;
 using ReferenceManager.Responses;
 
 namespace ReferenceManager.Endpoints;
@@ -12,10 +11,10 @@ public static class FavoriteEndpoints
         // &begin[ListFavorites]
         app.MapGet("/favorites", async (AppDbContext db, int limit = 25, int offset = 0) =>
         {
-            var query = db.Papers.AsNoTracking().Where(p => p.IsFavorited);
+            var query = db.Papers.Include(p => p.Authors).Include(p => p.Groups).AsNoTracking().Where(p => p.IsFavorited);
             var total = await query.CountAsync();
             var items = await query.Skip(offset).Take(limit).ToListAsync();
-            return Results.Ok(new PagedResult<Paper>(items, total, limit, offset));
+            return Results.Ok(new PagedResult<PaperResponse>(items.Select(p => p.ToResponse()).ToList(), total, limit, offset));
         })
         .WithName("ListFavorites")
         .WithOpenApi();

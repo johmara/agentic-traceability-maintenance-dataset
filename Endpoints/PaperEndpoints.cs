@@ -15,16 +15,16 @@ public static class PaperEndpoints
         app.MapGet("/papers", async (AppDbContext db, int limit = 25, int offset = 0) =>
         {
             var total = await db.Papers.CountAsync();
-            var items = await db.Papers.Include(p => p.Authors)
+            var items = await db.Papers.Include(p => p.Authors).Include(p => p.Groups)
                 .Skip(offset).Take(limit).ToListAsync();
-            return Results.Ok(new PagedResult<Paper>(items, total, limit, offset));
+            return Results.Ok(new PagedResult<PaperResponse>(items.Select(p => p.ToResponse()).ToList(), total, limit, offset));
         })
         .WithName("ListPapers")
         .WithOpenApi();
 
         app.MapGet("/papers/{id:int}", async (int id, AppDbContext db) =>
-            await db.Papers.Include(p => p.Authors).FirstOrDefaultAsync(p => p.Id == id) is Paper paper
-                ? Results.Ok(paper)
+            await db.Papers.Include(p => p.Authors).Include(p => p.Groups).FirstOrDefaultAsync(p => p.Id == id) is Paper paper
+                ? Results.Ok(paper.ToResponse())
                 : Results.NotFound())
             .WithName("GetPaper")
             .WithOpenApi();
@@ -50,7 +50,7 @@ public static class PaperEndpoints
             };
             db.Papers.Add(paper);
             await db.SaveChangesAsync();
-            return Results.Created($"/api/v1/papers/{paper.Id}", paper);
+            return Results.Created($"/api/v1/papers/{paper.Id}", paper.ToResponse());
         })
         .WithName("CreatePaper")
         .WithOpenApi();
@@ -59,7 +59,7 @@ public static class PaperEndpoints
         // &begin[UpdatePaper]
         app.MapPut("/papers/{id:int}", async (int id, PaperRequest req, AppDbContext db) =>
         {
-            var paper = await db.Papers.Include(p => p.Authors).FirstOrDefaultAsync(p => p.Id == id);
+            var paper = await db.Papers.Include(p => p.Authors).Include(p => p.Groups).FirstOrDefaultAsync(p => p.Id == id);
             if (paper is null) return Results.NotFound();
 
             var cache = new Dictionary<string, Author>();
@@ -75,7 +75,7 @@ public static class PaperEndpoints
             paper.Journal = req.Journal;
             paper.Booktitle = req.Booktitle;
             await db.SaveChangesAsync();
-            return Results.Ok(paper);
+            return Results.Ok(paper.ToResponse());
         })
         .WithName("UpdatePaper")
         .WithOpenApi();
@@ -177,6 +177,65 @@ public static class PaperEndpoints
         .WithName("ImportBibtex")
         .WithOpenApi();
         // &end[ImportBibtex]
+
+        // &begin[SearchPapers]
+        app.MapGet("/papers/search", async (
+            AppDbContext db,
+            string? q,
+            int? groupId,
+            int? yearFrom,
+            int? yearTo,
+            int limit = 25,
+            int offset = 0) =>
+        {
+            var query = db.Papers.Include(p => p.Authors).Include(p => p.Groups).AsQueryable();
+
+            if (groupId.HasValue)
+                query = query.Where(p => p.Groups.Any(g => g.Id == groupId.Value));
+            if (yearFrom.HasValue)
+                query = query.Where(p => p.Year >= yearFrom.Value);
+            if (yearTo.HasValue)
+                query = query.Where(p => p.Year <= yearTo.Value);
+
+            var papers = await query.ToListAsync();
+
+            if (string.IsNullOrWhiteSpace(q))
+            {
+                var page = papers.Skip(offset).Take(limit)
+                    .Select(p => new SearchResultItem(p.ToResponse(), 0)).ToList();
+                return Results.Ok(new SearchResponse(page, papers.Count));
+            }
+
+            var terms = q.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(t => t.ToLowerInvariant()).Distinct().ToArray();
+
+            var scored = papers
+                .Select(p =>
+                {
+                    var title = p.Title.ToLowerInvariant();
+                    var abstrakt = p.Abstract?.ToLowerInvariant() ?? "";
+                    var authors = p.Authors.Select(a => a.Name.ToLowerInvariant()).ToList();
+                    double score = 0;
+                    foreach (var term in terms)
+                    {
+                        if (title.Contains(term)) score += 10;
+                        if (abstrakt.Contains(term)) score += 3;
+                        foreach (var name in authors)
+                            if (name.Contains(term)) score += 5;
+                    }
+                    return (Paper: p, Score: score);
+                })
+                .Where(x => x.Score > 0)
+                .OrderByDescending(x => x.Score)
+                .ToList();
+
+            var resultPage = scored.Skip(offset).Take(limit)
+                .Select(x => new SearchResultItem(x.Paper.ToResponse(), x.Score)).ToList();
+            return Results.Ok(new SearchResponse(resultPage, scored.Count));
+        })
+        .WithName("SearchPapers")
+        .WithOpenApi();
+        // &end[SearchPapers]
 
         // &begin[ExportBibtex]
         app.MapGet("/papers/export/bibtex", async (AppDbContext db, int? groupId, bool? favorited) =>
