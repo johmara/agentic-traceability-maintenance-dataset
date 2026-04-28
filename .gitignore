@@ -48,3 +48,8 @@ Desktop.ini
 appsettings.Local.json
 appsettings.*.local.json
 **/secrets.json
+
+## Claude / MCP (internal tooling, not for public repo)
+.claude/
+CLAUDE.md
+.mcp.json
