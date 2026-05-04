@@ -7,6 +7,11 @@ using Scalar.AspNetCore;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+// &begin[ApiDocs]
+builder.Services.AddCors(options =>
+    options.AddDefaultPolicy(p =>
+        p.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod()));
+// &end[ApiDocs]
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles);
 
@@ -16,6 +21,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // &end[Database]
 
 var app = builder.Build();
+
+app.UseCors(); // &line[ApiDocs]
 
 // &begin[ApiDocs]
 if (app.Environment.IsDevelopment())
